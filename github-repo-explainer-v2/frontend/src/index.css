@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Design tokens for both themes.
+  Deliberately NOT the default shadcn "slate + black" look — this uses
+  a deep indigo base with a warm amber accent (reserved for the AI /
+  "analyze" actions) so the dashboard reads as its own product rather
+  than a stock shadcn template. Every component below only ever
+  references these variables (bg-background, text-muted-foreground,
+  etc.) — never a hardcoded color — so switching themes here updates
+  the whole app automatically.
+*/
+@layer base {
+  :root {
+    --background: 240 25% 98%;
+    --foreground: 240 10% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 12%;
+
+    /* Primary = deep indigo, used for nav highlights / primary buttons */
+    --primary: 243 65% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 15% 94%;
+    --secondary-foreground: 240 10% 20%;
+
+    --muted: 240 15% 94%;
+    --muted-foreground: 240 8% 46%;
+
+    /* Accent = warm amber, reserved for "AI-generated" highlights */
+    --accent: 38 92% 50%;
+    --accent-foreground: 240 10% 12%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 15% 88%;
+    --input: 240 15% 88%;
+    --ring: 243 65% 42%;
+
+    --radius: 0.65rem;
+  }
+
+  .dark {
+    --background: 240 22% 8%;
+    --foreground: 240 10% 92%;
+
+    --card: 240 20% 11%;
+    --card-foreground: 240 10% 92%;
+
+    --popover: 240 20% 11%;
+    --popover-foreground: 240 10% 92%;
+
+    --primary: 243 75% 68%;
+    --primary-foreground: 240 20% 10%;
+
+    --secondary: 240 15% 16%;
+    --secondary-foreground: 240 10% 88%;
+
+    --muted: 240 15% 16%;
+    --muted-foreground: 240 8% 62%;
+
+    --accent: 38 92% 58%;
+    --accent-foreground: 240 20% 10%;
+
+    --destructive: 0 63% 42%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 15% 20%;
+    --input: 240 15% 20%;
+    --ring: 243 75% 68%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+}

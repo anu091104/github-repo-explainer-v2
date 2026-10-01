@@ -1,0 +1,20 @@
+# Render Blueprint - lets Render create the backend service from this file.
+# (You can also create the service by hand in the dashboard; same settings.)
+services:
+  - type: web
+    name: repo-explainer-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false        # Render will ask you to paste the value
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false        # e.g. https://your-app.vercel.app,http://localhost:5173
+      - key: GEMINI_MODEL
+        value: gemini-flash-latest
