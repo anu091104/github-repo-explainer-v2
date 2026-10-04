@@ -4,7 +4,8 @@
 
 React + TypeScript + shadcn/ui on the frontend, FastAPI + Google Gemini on the backend.
 
-> Live demo:https://github-repo-explainer-v2.vercel.app/· API:https://github-repo-explainer-v2.onrender.com
+> Live demo: https://github-repo-explainer-v2.vercel.app/
+> API: https://github-repo-explainer-v2.onrender.com
 
 ## How it works
 
