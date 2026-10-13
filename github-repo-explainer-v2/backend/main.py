@@ -19,6 +19,7 @@ Deployment (Render): start command is
 and ALLOWED_ORIGINS must contain your Vercel URL (comma-separated list).
 """
 
+import logging
 import os
 import time
 
@@ -27,6 +28,11 @@ import time
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Shows up in Render's "Logs" tab - this is where the REAL reason for a
+# failed analysis gets printed.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("repo_explainer")
 
 from fastapi import FastAPI, HTTPException  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
@@ -100,7 +106,15 @@ async def health():
         "status": "healthy",
         "gemini_configured": bool(os.getenv("GEMINI_API_KEY", "").strip())
         and not os.getenv("GEMINI_API_KEY", "").startswith("your_"),
+        "gemini_models": gemini._models_to_try(),
+        "cached_repos": len(_cache),
     }
+
+
+@app.get("/health/github")
+async def health_github():
+    """Open this in a browser to see if the GitHub quota is the problem."""
+    return await github_api.rate_limit_status()
 
 
 @app.post("/analyze")
@@ -110,14 +124,18 @@ async def analyze_repository(request: AnalyzeRequest):
 
     cached = _cache_get(cache_key)
     if cached is not None:
+        log.info("cache hit: %s", cache_key)
         return cached
 
+    log.info("analyzing: %s", cache_key)
     try:
         repo_info, readme, contents = await github_api.fetch_repo_bundle(owner, repo)
         analysis = await gemini.analyze_with_gemini(repo_info, readme, contents)
     except github_api.GitHubError as exc:
+        log.warning("analyze %s failed at GitHub step: %s", cache_key, exc)
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except gemini.GeminiError as exc:
+        log.warning("analyze %s failed at Gemini step: %s", cache_key, exc)
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     result = {

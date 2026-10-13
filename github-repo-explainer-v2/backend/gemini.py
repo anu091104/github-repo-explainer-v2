@@ -21,12 +21,15 @@ Google retires a model you only change an env var, not the code.
 """
 
 import asyncio
+import logging
 import os
 
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
 from pydantic import BaseModel, Field, ValidationError
+
+log = logging.getLogger("repo_explainer.gemini")
 
 DEFAULT_MODEL = "gemini-flash-latest"
 
@@ -147,6 +150,7 @@ async def _generate_with_fallback(client: genai.Client, prompt: str, config):
                     model=model_name, contents=prompt, config=config
                 )
             except genai_errors.APIError as exc:
+                log.warning("Gemini %s on model %s (attempt %d): %s", exc.code, model_name, attempt + 1, exc.message)
                 last_error = _to_gemini_error(exc, model_name)
                 if exc.code in (400, 401, 403):
                     raise last_error from exc  # bad key/request: another model won't help
@@ -156,7 +160,8 @@ async def _generate_with_fallback(client: genai.Client, prompt: str, config):
                     continue  # same model, one more time
                 break  # next model
             except Exception as exc:  # network problems, timeouts, ...
-                last_error = GeminiError(f"Could not reach Gemini: {exc}")
+                log.exception("Unexpected error calling Gemini model %s", model_name)
+                last_error = GeminiError(f"Could not reach Gemini: {exc!r}")
                 break  # next model
 
     raise last_error
@@ -184,10 +189,23 @@ async def analyze_with_gemini(repo_info: dict, readme: str, contents: list[dict]
 
     response = await _generate_with_fallback(client, prompt, config)
 
+    if not response.text:
+        # Empty answer = Gemini stopped early (safety filter, token limit, ...).
+        reason = None
+        if response.candidates:
+            reason = response.candidates[0].finish_reason
+        block = getattr(response.prompt_feedback, "block_reason", None) if response.prompt_feedback else None
+        log.warning("Gemini returned no text (finish_reason=%s, block_reason=%s)", reason, block)
+        raise GeminiError(
+            f"Gemini returned an empty answer (finish_reason={reason}, block_reason={block}). "
+            "Try again, or try a different repository."
+        )
+
     try:
         # response.text is the raw JSON string; validate it against our schema.
         analysis = RepoAnalysis.model_validate_json(response.text or "")
     except ValidationError as exc:
+        log.warning("Gemini JSON failed validation: %s | raw=%s", exc, (response.text or "")[:500])
         raise GeminiError(f"Gemini returned an answer in an unexpected format: {exc}") from exc
 
     return analysis.model_dump()

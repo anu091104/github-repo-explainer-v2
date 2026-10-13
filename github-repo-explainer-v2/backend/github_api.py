@@ -15,9 +15,12 @@ Works for ANY public repository - owner/repo come from the user's URL.
 
 import asyncio
 import base64
+import logging
 import os
 
 import httpx
+
+log = logging.getLogger("repo_explainer.github")
 
 GITHUB_API_BASE = "https://api.github.com"
 README_MAX_CHARS = 12000
@@ -48,15 +51,43 @@ def _headers() -> dict:
     return headers
 
 
+def _token_is_set() -> bool:
+    token = os.getenv("GITHUB_TOKEN", "")
+    return bool(token.strip()) and not token.startswith("your_")
+
+
 def _raise_if_rate_limited(response: httpx.Response) -> None:
-    if response.status_code in (403, 429) and (
-        response.headers.get("x-ratelimit-remaining") == "0" or response.status_code == 429
-    ):
+    """
+    Turns GitHub's auth / rate-limit refusals into clear messages.
+    Note: GitHub's *secondary* rate limit is a 403 WITHOUT
+    x-ratelimit-remaining == 0, so we can't rely on that header alone.
+    """
+    code = response.status_code
+    if code not in (401, 403, 429):
+        return
+
+    remaining = response.headers.get("x-ratelimit-remaining")
+    body = response.text[:300]
+    log.warning(
+        "GitHub %s on %s (remaining=%s, token_set=%s): %s",
+        code, response.request.url.path, remaining, _token_is_set(), body,
+    )
+
+    if code == 401:
         raise GitHubError(
-            "GitHub API rate limit reached. Add a GITHUB_TOKEN to the backend "
-            "environment variables, or try again later.",
-            status_code=429,
+            "GitHub rejected the server's GITHUB_TOKEN (expired or invalid). "
+            "Generate a new token and update it in the backend environment variables.",
+            status_code=502,
         )
+    if code == 429 or remaining == "0" or "rate limit" in body.lower():
+        hint = (
+            "Try again in a few minutes."
+            if _token_is_set()
+            else "The server has no GITHUB_TOKEN, so it shares a tiny anonymous quota. Add one."
+        )
+        raise GitHubError(f"GitHub API rate limit reached. {hint}", status_code=429)
+    # other 403s: repo blocked (DMCA), access restricted, etc.
+    raise GitHubError(f"GitHub refused access to this repository (403): {body}", status_code=502)
 
 
 def _parse_repo_info(data: dict) -> dict:
@@ -89,6 +120,7 @@ async def _get_repo_info(client: httpx.AsyncClient, owner: str, repo: str) -> di
             status_code=404,
         )
     if response.status_code != 200:
+        log.warning("GitHub %s for %s/%s: %s", response.status_code, owner, repo, response.text[:300])
         raise GitHubError(f"GitHub returned an error ({response.status_code}).", status_code=502)
     return _parse_repo_info(response.json())
 
@@ -141,4 +173,26 @@ async def fetch_repo_bundle(
             )
             return info, readme, contents
         except httpx.HTTPError as exc:
-            raise GitHubError(f"Could not reach GitHub: {exc}", status_code=502) from exc
+            log.exception("Network error talking to GitHub for %s/%s", owner, repo)
+            raise GitHubError(f"Could not reach GitHub: {exc!r}", status_code=502) from exc
+
+
+async def rate_limit_status() -> dict:
+    """
+    For /health: how much GitHub quota this server has left.
+    Calling /rate_limit does NOT itself use up quota.
+    """
+    try:
+        async with httpx.AsyncClient(base_url=GITHUB_API_BASE, headers=_headers(), timeout=10) as client:
+            response = await client.get("/rate_limit")
+        if response.status_code == 401:
+            return {"token_set": _token_is_set(), "error": "token rejected (401)"}
+        core = response.json().get("resources", {}).get("core", {})
+        return {
+            "token_set": _token_is_set(),
+            "limit": core.get("limit"),
+            "remaining": core.get("remaining"),
+            "resets_at": core.get("reset"),
+        }
+    except Exception as exc:  # health checks must never crash
+        return {"token_set": _token_is_set(), "error": repr(exc)}
