@@ -162,8 +162,14 @@ async def fetch_repo_bundle(
     owner: str, repo: str, transport: httpx.AsyncBaseTransport | None = None
 ) -> tuple[dict, str, list[dict]]:
     """Returns (repo_info, readme, contents). `transport` is only used by tests."""
+    # follow_redirects: renamed/transferred repos (e.g. tiangolo/fastapi ->
+    # fastapi/fastapi) answer with a 301 pointing at the new location.
     async with httpx.AsyncClient(
-        base_url=GITHUB_API_BASE, headers=_headers(), timeout=15, transport=transport
+        base_url=GITHUB_API_BASE,
+        headers=_headers(),
+        timeout=15,
+        transport=transport,
+        follow_redirects=True,
     ) as client:
         try:
             info, readme, contents = await asyncio.gather(

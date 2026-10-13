@@ -76,6 +76,6 @@ export const MOCK_ANALYSIS_RESPONSE: AnalyzeResponse = {
 export const EXAMPLE_REPOS: ExampleRepo[] = [
   { label: "facebook/react", url: "https://github.com/facebook/react" },
   { label: "langchain-ai/langchain", url: "https://github.com/langchain-ai/langchain" },
-  { label: "tiangolo/fastapi", url: "https://github.com/tiangolo/fastapi" },
+  { label: "fastapi/fastapi", url: "https://github.com/fastapi/fastapi" },
   { label: "vercel/next.js", url: "https://github.com/vercel/next.js" },
 ];
